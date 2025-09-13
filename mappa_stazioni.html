@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mappa Meteo Dinamica</title>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css" rel="stylesheet">
+  <script src="https://unpkg.com/ol@latest/dist/ol.js"></script>
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+    #menu-container {
+      position: absolute;
+      top: 40px;
+      left: 5px;
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 10;
+    }
+      .ol-popup {
+      position: absolute;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid black;
+      font-size: 16px;
+      width: 450px;         /* aumento larghezza */
+      max-width: 90vw;      /* non oltre il 90% dello schermo */
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); /* effetto ombra carino */
+    }
+    .popup-image {
+      width: 100%;
+      max-height: 350px;   /* puoi alzare anche questa se vuoi immagini più alte */
+      object-fit: cover;
+      cursor: pointer;
+    }
+    #logo {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      z-index: 20;
+    }
+    #logo img {
+      width: 150px; /* Puoi cambiare la dimensione del logo */
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <div id="menu-container">
+    <label for="parameter-select">Seleziona Parametro da visualizzare: </label>
+    <select id="parameter-select" onchange="updateMarkers(this.value)">
+      <option value="temperatura">Temperatura</option>
+      <option value="temperatura_max">Temperatura Massima</option>
+      <option value="temperatura_min">Temperatura Minima</option>
+      <option value="vento">Vento</option>
+      <option value="day_rain">Pioggia Giornaliera</option>
+      <option value="month_rain">Pioggia Mensile</option>
+      <option value="year_rain">Pioggia Annuale</option>
+      <option value="pressione">Pressione</option>
+    </select>
+  </div>
+  <div id="map"></div>
+
+  <script>
+    const mapboxToken = 'pk.eyJ1IjoiaXZhbjEzIiwiYSI6ImNsem1tcWIyeTBmeXcya3I0Mm9iMnduZ2kifQ.ohKNs_jXuoP88ApihpaxXA';
+
+    const map = new ol.Map({
+      target: 'map',
+      layers: [
+        new ol.layer.Tile({
+          source: new ol.source.XYZ({
+            url: `https://api.mapbox.com/styles/v1/mapbox/streets-v11/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`,
+            maxZoom: 19
+          })
+        })
+      ],
+      view: new ol.View({
+        center: ol.proj.fromLonLat([13.755, 37.735]),
+        zoom: 12
+      })
+    });
+
+    const markerLayer = new ol.layer.Vector({ source: new ol.source.Vector() });
+    map.addLayer(markerLayer);
+
+    const popupElement = document.createElement('div');
+    popupElement.className = 'ol-popup';
+    const popupOverlay = new ol.Overlay({
+      element: popupElement,
+      positioning: 'bottom-center',
+      offset: [0, -10]
+    });
+    map.addOverlay(popupOverlay);
+
+    const stations = [
+      "https://meteofontanamurata.altervista.org/dati_stazioni/davis/alia_chianchitelle.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/withcoo/aliagulfa.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/withcoo/aliasauchi.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Xireni.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/tempest/alia_viapalermo.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Vicari.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/withcoo/fontanamurata.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Valledolmo_ChiusaMadonna.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/withcoo/valledolmoviabarone.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Tudia.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/withcoo/terminiimerese.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/withcoo/cefalu.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/withcoo/bisacquino.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/marianopoli.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/ciminna3.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/ciminna4.php",
+      "https://meteofontanamurata.altervista.org/mappadati/stazioni/withcoo/gibilmanna.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/SclafaniBagni_Regaleali.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Resuttano.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Prizzi_SIAS.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/PolizziGenereosa_SIAS.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/PetraliaSottana_SIAS.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Mussomeli_SP16.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Mussomeli_SIAS.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/MontemaggioreBelsito.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/MarcatoBianco.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/LercaraFriddi.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/FondachelloCaltavuturo.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Carcarazza.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Cammarata_TumarranoSIAS.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Cammarata_Stazione.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Caccamo_SP117.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/BivioManganaro.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Alia_SP53.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/netatmo/monreale.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Gibilmanna.php",
+      "https://meteofontanamurata.altervista.org/dati_stazioni/monte_mufara.php",
+	  "https://meteofontanamurata.altervista.org/dati_stazioni/PC/all/Alia_ContradaCozzo.php"
+    ];
+
+    function fetchWeatherData(url) {
+      return fetch(url)
+        .then(response => response.json())
+        .catch(error => {
+          console.error('Errore nel recupero dei dati:', error);
+          return null;
+        });
+    }
+
+    function cleanValue(value) {
+      return typeof value === 'string' ? parseFloat(value.replace(/[^\d.-]/g, '')) : parseFloat(value);
+    }
+    
+    function getColoreParametro(parametro, valore) {
+    if (parametro === "temperatura") {
+        if (valore <= -20) return "#5e00a8";      // viola scuro
+        if (valore <= -15) return "purple";       // viola
+        if (valore <= -10) return "#6a5acd";      // blu violaceo
+        if (valore <= -5)  return "#00bfff";      // azzurro intenso
+        if (valore <= 0)   return "lightblue";    // celeste
+        if (valore <= 5)   return "#00ffcc";      // turchese chiaro
+        if (valore <= 10)  return "lightgreen";   // verde chiaro
+        if (valore <= 15)  return "green";        // verde
+        if (valore <= 20)  return "#adff2f";      // verde giallastro
+        if (valore <= 25)  return "yellow";       // giallo
+        if (valore <= 28)  return "#ffcc00";      // giallo arancio
+        if (valore <= 31)  return "orange";       // arancio
+        if (valore <= 34)  return "#ff4500";      // arancio scuro
+        if (valore <= 37)  return "red";          // rosso
+        if (valore <= 40)  return "#b22222";      // rosso mattone
+        return "darkred";                         // rosso scuro
+    }
+
+    if (parametro === "temperatura_max") {
+        if (valore <= -20) return "#5e00a8";
+        if (valore <= -15) return "purple";
+        if (valore <= -10) return "#6a5acd";
+        if (valore <= -5)  return "#00bfff";
+        if (valore <= 0)   return "lightblue";
+        if (valore <= 5)   return "#00ffcc";
+        if (valore <= 10)  return "lightgreen";
+        if (valore <= 15)  return "green";
+        if (valore <= 20)  return "#adff2f";
+        if (valore <= 25)  return "yellow";
+        if (valore <= 28)  return "#ffcc00";
+        if (valore <= 31)  return "orange";
+        if (valore <= 34)  return "#ff4500";
+        if (valore <= 37)  return "red";
+        if (valore <= 40)  return "#b22222";
+        return "darkred";
+    }
+
+    if (parametro === "temperatura_min") {
+        if (valore <= -20) return "#5e00a8";
+        if (valore <= -15) return "purple";
+        if (valore <= -10) return "#6a5acd";
+        if (valore <= -5)  return "#00bfff";
+        if (valore <= 0)   return "lightblue";
+        if (valore <= 5)   return "#00ffcc";
+        if (valore <= 10)  return "lightgreen";
+        if (valore <= 15)  return "green";
+        if (valore <= 20)  return "#adff2f";
+        if (valore <= 25)  return "yellow";
+        if (valore <= 28)  return "#ffcc00";
+        if (valore <= 31)  return "orange";
+        if (valore <= 34)  return "#ff4500";
+        if (valore <= 37)  return "red";
+        if (valore <= 40)  return "#b22222";
+        return "darkred";
+    }
+     
+    if (parametro === "vento") {
+        if (valore <= 5) return "green";
+        if (valore <= 15) return "yellow";
+        if (valore <= 30) return "orange";
+        if (valore <= 50) return "red";
+        return "darkred";
+    }
+    if (parametro === "day_rain") {
+        if (valore == 0) return "gray";
+        if (valore <= 5) return "lightblue";
+        if (valore <= 20) return "green";
+        if (valore <= 50) return "yellow";
+        if (valore <= 100) return "orange";
+        return "red";
+    }
+    if (parametro === "month_rain") {
+        if (valore <= 10) return "gray";
+        if (valore <= 30) return "lightblue";
+        if (valore <= 80) return "green";
+        if (valore <= 150) return "yellow";
+        if (valore <= 250) return "orange";
+        return "red";
+    }
+    if (parametro === "year_rain") {
+        if (valore <= 200) return "gray";
+        if (valore <= 400) return "lightblue";
+        if (valore <= 600) return "green";
+        if (valore <= 800) return "yellow";
+        if (valore <= 1000) return "orange";
+        return "red";
+    }    
+    if (parametro === "pressione") {
+        if (valore < 980) return "purple";
+        if (valore <= 1000) return "blue";
+        if (valore <= 1020) return "green";
+        if (valore <= 1035) return "yellow";
+        return "orange";
+    }
+    return "gray";
+    }
+
+    function updateMarkers(parameter) {
+      markerLayer.getSource().clear();
+      stations.forEach(url => {
+        fetchWeatherData(url).then(data => {
+          if (!data || data[parameter] === undefined || data[parameter] === null) return;  // Evita undefined/null
+          const value = cleanValue(data[parameter]);
+          if (isNaN(value)) return;
+
+          const lon = parseFloat(data.Lon) || 13.72;
+          const lat = parseFloat(data.Lat) || 37.8;
+          const coordinate = ol.proj.fromLonLat([lon, lat]);
+          const colore = getColoreParametro(parameter, value);
+
+          const marker = new ol.Feature({
+            geometry: new ol.geom.Point(coordinate),
+            nome: data.nome,
+            value: value,
+            immagine: data.immagini ? data.immagini[0] : "",
+            link_stazione: data.link_stazione || "#",
+            link_webcam: data.link_webcam || ""
+          });
+
+          marker.setStyle(new ol.style.Style({
+            image: new ol.style.Circle({
+              radius: 20,
+              fill: new ol.style.Fill({ color: colore }),
+              stroke: new ol.style.Stroke({ color: '#000', width: 2 })
+            }),
+            text: new ol.style.Text({
+              text: value.toFixed(1),
+              font: 'bold 16px Arial',
+              fill: new ol.style.Fill({ color: '#fff' }),
+              stroke: new ol.style.Stroke({ color: '#000', width: 3 })
+            })
+          }));
+
+          markerLayer.getSource().addFeature(marker);
+        });
+      });
+    }
+
+    map.on('click', function (evt) {
+      const feature = map.forEachFeatureAtPixel(evt.pixel, function (feature) {
+        return feature;
+      });
+      if (feature) {
+        const nome = feature.get("nome");
+        const immagine = feature.get("immagine");
+        const linkStazione = feature.get("link_stazione");
+        let linkWebcam = feature.get("link_webcam");
+
+        let webcamHTML = "";
+        if (linkWebcam) {
+          // Se è un link classico di YouTube, trasformalo in embed
+          if (linkWebcam.includes("youtube.com/watch")) {
+            const videoId = new URL(linkWebcam).searchParams.get("v");
+            if (videoId) {
+              linkWebcam = `https://www.youtube.com/embed/${videoId}`;
+            }
+          }
+          webcamHTML = `
+            <div class="video-container" style="margin-top:10px;">
+              <iframe src="${linkWebcam}"
+                      frameborder="0"
+                      allow="autoplay; encrypted-media"
+                      allowfullscreen
+                      width="100%" height="200"></iframe>
+            </div>`;
+        }
+
+        popupElement.innerHTML = `
+          <h3>${nome}</h3>
+          <img src="${immagine}" class="popup-image" onclick="window.open('${linkStazione}', '_blank')">
+          <p><a href="${linkStazione}" target="_blank">Misurazioni e dettagli stazione</a></p>
+          ${webcamHTML}
+        `;
+        popupOverlay.setPosition(feature.getGeometry().getCoordinates());
+      } else {
+        popupOverlay.setPosition(undefined);
+      }
+    });
+
+    updateMarkers("temperatura");
+
+// Funzione per aggiornare i marker ogni minuto
+let currentParameter = "temperatura";
+
+function aggiornaDatiAutomatico() {
+    updateMarkers(currentParameter);
+}
+
+// Imposta un intervallo di aggiornamento ogni 60 secondi
+setInterval(aggiornaDatiAutomatico, 120000);
+
+// Salva il parametro selezionato quando cambia il menu a tendina
+document.getElementById('parameter-select').addEventListener('change', function() {
+    currentParameter = this.value;
+    updateMarkers(currentParameter);
+});
+  </script>
+<div id="logo">
+  <img src="https://meteofontanamurata.altervista.org/MAED/loghi/MAEDpng.png" alt="Logo">
+</div>  
+  
+</body>
+</html>
